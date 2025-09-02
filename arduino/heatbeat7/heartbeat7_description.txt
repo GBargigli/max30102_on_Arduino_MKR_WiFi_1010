@@ -1,0 +1,108 @@
+************************** variabili globali **************************
+
+performingMeasure: flag che avvia acquisizione e invio BLE (notify) dei segnali Red e IR
+sendTemp: flag che avvia acquisizione e invio BLE (notify) dei dati di temperatura 
+isConnected: flag che segnala la presenza di una connessione Bluetooth attiva
+
+numSec: durata desiderata in secondi
+
+dataPacket[100]: array uint8_t preallocato,  buffer invio BLE dati Red e IR
+sampleIndex: indice per scrittura di 10 campioni (10 Byte) sul buffer
+
+temperatureBuffer[numSec]
+timebuffer[numsec]: buffer per dati di T° e timestamps (campionati a 1Hz)
+tempIndex: indice che si aggiorna ogni volta che un nuovo dato viene scritto nei buffer
+tempSendIndex: indice che si aggiorna ogni invio (n° di pacchetti inviati)
+packetCounter: conta pacchetti red/ir inviati (~100 Hz), ogni 10 invia T°
+lastPacketTimestamp: memorizza timestamp ultimo pacchetto inviato (associato a T° successiva)
+
+************************** Funzioni Helper **************************
+
+1. RITORNA IL BYTE PRESENTE SU UN REGISTRO DEL MAX30102
+ byte readRegister(byte reg)
+- scrive (I2C) al sensore il registro da leggere
+- invia richiesta di lettura di un byte dal registro
+- controlla che sia stato ottenuto un singolo byte
+- se il dato è disponibile lo ritorna, altrimenti ritorna 0
+
+2. RITORNA UN DATO DI T*
+float readTemperature()
+- scrive 1 sul registro di configurazione della T° (TEMP_EN = 1 --> avvia conversione)
+- legge il registro della parte intera
+- legge il registro della parte frazionaria
+- ritorna la somma delle due parti 
+
+3. INVIO DEI DATI DI T° CON UNA SERIE DI PACCHETTI BLE
+void sendTemperatureBufferBLE()
+maxPerPacket: n di datapoint (T°; t) per pacchetto ble
+tempPacket[80]: preallocazione array pacchetto
+
+- while tempSendIndex < tempIndex (finchè non ho inviato tutti I dati)
+entries: min(maxPerPacket, tempIndex-tempSendIndex)
+	- iterando (j) di 1 da 0 a entries (per ogni dato del paccchetto)
+		-copia 4 byte (T°) nel buffer (j*8)
+		-copia 4 byte (t) nel buffer (j*8 + 4)
+	- invia il buffer BLE
+	- aumenta tempSendIndex di entries
+- resetta indici
+- flag sendTemp: false
+
+4. SALVA E INVIA BUFFER DI DATI DA 10 CAMPIONI
+INOLTRE, OGNI 10 INVII SALVA UN READTEMPERATURE E UN TIMESTAMP NEI BUFFER (T°; t)
+void storeOneSample()
+- asssegna i valori red e ir, assegna il timepoint (irValue, redValue, timeMicros)
+- scrive I valori (3+3+4 bit)  nel buffer con un offset incrementale
+- aumenta sampleIndex ogni volta che viene scritto un valore
+- quando sampleIndex arriva a 10:
+	- invia il buffer con BLE
+	- aumenta packetCounter
+	- se packetCounter arriva a 10:
+		- assegna lastPacketTimeStamp e lo scrive nel timeBuffer
+		- chiama readTemperature e scrive il return nel temperatureBuffer
+		- aumenta tempIndex
+		- resetta a 0 packetCounter
+
+**************************  Setup **************************
+1. inizializza connessione seriale col sensore (tentativi multipli di inizializzare la connessione)
+
+2. configura I parametri di acquisizione del sensore
+3. abilita l'interrupt per PPG_RDY e legge il registro per pulirlo da interrupt residui
+4. crea caratteristiche BLE e service, aggiunge il servizio, inizializza I valori delle caratteristiche, pubblica il servizio BLE
+
+************************** loop **************************
+
+- se la flag isConnected è false continua a cercare un dispositivo centrale BLE
+
+- se esiste una connessione:
+	- la flag isConnected diventa True
+	- se viene scritta la char Command, assegna il valore scritto a cmd, se è:
+		1 -> performingMeasure = true;  sendTemp = false; 
+		2 -> performingMeasure = false; sendTemp = true; 
+		else -> performingMeasure = false; sendTemp = false;
+	- se performingMeasure: 
+		- polling del registro PPG_RDY, se è 1:
+			storeOneSample()
+	- se sendTemp:
+		- sendTemperatureBufferBLE()
+- else: reset in caso di disconnessione (isConnected = false; performingMeasure = false; sendTemp = false; sampleIndex = 0; packetCounter = 0; tempIndex = 0;)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
