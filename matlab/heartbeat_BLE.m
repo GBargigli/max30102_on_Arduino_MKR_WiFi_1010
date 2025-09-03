@@ -1,3 +1,5 @@
+% THIS HELPER FUNCTION RECEIVES AND STORES MAX30102-BLUETOOTH-TRANSMITTED-DATA
+
 function heartbeat_BLE(numSec)
     if nargin < 1
         numSec = 40; % default 40 secondi
