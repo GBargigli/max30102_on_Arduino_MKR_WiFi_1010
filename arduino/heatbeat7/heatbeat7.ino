@@ -1,4 +1,5 @@
 // Max 30102 on Arduino MKR WiFi 1010
+// Works along with the MATLAB helper function heartbeat_BLE
 
 #include <Wire.h>
 #include "MAX30105.h"

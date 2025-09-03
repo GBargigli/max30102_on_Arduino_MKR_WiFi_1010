@@ -1,4 +1,5 @@
 % THIS HELPER FUNCTION RECEIVES AND STORES MAX30102-BLUETOOTH-TRANSMITTED-DATA
+% it is called by the script SNR2
 
 function heartbeat_BLE(numSec)
     if nargin < 1
