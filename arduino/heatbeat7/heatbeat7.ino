@@ -1,62 +1,70 @@
 // Max 30102 on Arduino MKR WiFi 1010
-// Works along with the MATLAB helper function heartbeat_BLE
 
+// Necessary libraries
 #include <Wire.h>
 #include "MAX30105.h"
 #include <ArduinoBLE.h>
 
-// === VARIABILI GLOBALI =======================
-bool performingMeasure = false; // flag per comando (n!=0) da MATLAB
-bool sendTemp = false;
-bool isConnected = false; // flag connessione
-//volatile bool newData = false; // flag per interrupt hardware
-BLEDevice central; // central rappresenta un dispositivo Bluetooth centrale che si connette al tuo dispositivo Arduino.
+// ========== GLOBAL VARIABLES =======================
+bool performingMeasure = false; // turns TRUE when MATLAB sends the start input for measuring (n!=0) 
+bool sendTemp = false; // turns true when BLE transmission of RED and IR data ends, starts BLE transmission of Temperature data
+bool isConnected = false; // turns TRUE when  a BLE connection is established
 
-const int numSec = 60;  // DDURATA desiderata in secondi
+BLEDevice central; // represents a central Bluetooth device that connects to your Arduino device.
 
-// BUFFER PER PACCHETTI DI DATI da 10 campioni
-uint8_t dataPacket[100];    // 10 campioni * 10 byte
-int sampleIndex = 0;        // indice campione attuale (0–9)
+// DESIRED DURATION for measuring (sec) 
+const int numSec = 60;  // 
 
-// === BUFFER TEMPERATURA (PER INVIO POST-MISURA) ===
+// BUFFER FOR DATA PACKETS (Red and IR) of 10 samples
+uint8_t dataPacket[100];    // 10 samples * 10 byte = 100 byte data packets
+int sampleIndex = 0;        // current sample index (0-9)
+
+// =========== TEMPERATURE BUFFER (FOR POST-MEASUREMENT DISPATCH, n° samples = numSec) ===================================
 
 float temperatureBuffer[numSec];      
 uint32_t timeBuffer[numSec];          
-int tempIndex = 0;  // n dati nel buffer 
-int tempSendIndex = 0;
-int packetCounter = 0;  // quanti pacchetti bleData inviati (ogni 10 leggi T°)
+int tempIndex = 0;  // number of data already in the buffer 
+int tempSendIndex = 0; // number of sent packages
+int packetCounter = 0;  // nummber of bleData packets sent (one every 10 read for T°)
 uint32_t lastPacketTimestamp = 0;
 
-// ============ BLE =========================== 
+// ============ BLE CONNECTION INITIALIZATION =========================== 
 
-// creo un bluetooth Service dedicato al mio sensore
+// Creates a Bluetooth Service dedicated to the sensor
 BLEService bleService("8ee10201-ce06-438a-9e59-549e3a39ba35"); 
 
-// Unica caratteristica BLE per pacchetto IR + RED + Time (10 byte)
-BLECharacteristic bleData("33303cf6-3aa4-44ad-8e3c-21084d9b08db", BLERead | BLENotify, 100); // 3+3+4 byte
-// Canale di comando (bidirezionale), numero !=0 --> inizo misurazione
+// Unique BLE characteristic for the signal data (IR + RED + Time = 3+3+4 byte = 10 bytes)
+BLECharacteristic bleData("33303cf6-3aa4-44ad-8e3c-21084d9b08db", BLERead | BLENotify, 100); 
+// Control channel (bi-directional), when MATLAB sends on the channel a number !=0 --> measurement starts
 BLEByteCharacteristic bleCommand("bf789fb6-f22d-43b5-bf9e-d5a166a86afa", BLERead | BLEWrite | BLENotify);   
-//caratteristica BLE per la temperatura (float 4 byte)
+//BLE characteristic for temperature data (float 4 bytes + time data 4 bytes = 8 bytes)
 BLECharacteristic bleTemp("44404cf7-4bb5-55be-9f60-32195a8c09ec", BLERead | BLENotify, 80); 
 
-MAX30105 particleSensor;    // creo oggetto sensore
+MAX30105 particleSensor;    // creates sensor object
 
 
-// === FUNZIONI HELPER ===
+// ============ HELPER FUNCTIONS ==================================================
 
-// FUNZIONE READREGISTER - input: registro da leggere & output: byte
+/* READREGISTER FUNCTION
+Reads a register from the max30102 sensor 
+Prints an error message if the number of received bytes is different from the expected number of bytes.
+Returns, if present, the output of the reading
+
+input: register to be read 
+output: read bytes */
+
 byte readRegister(byte reg) { 
   Wire.beginTransmission(0x57); // MAX30102 address
-  Wire.write(reg); // segnala il registro da leggere
-  Wire.endTransmission(false); // termina scrittura ma lascia la connessione I2C
+  Wire.write(reg); // sends the register that needs to be read to the sensor.
+  Wire.endTransmission(false); // terminates writing but leaves the I2C connection active
   
-  uint8_t bytesRequested = 1;
-  uint8_t bytesReceived = Wire.requestFrom(0x57, bytesRequested);
+  uint8_t bytesRequested = 1; // expected number of bytes
+  uint8_t bytesReceived = Wire.requestFrom(0x57, bytesRequested); // bytes of the reading
 
-  if (bytesReceived != bytesRequested) {
-    Serial.print("Errore: ricevuti ");
+  if (bytesReceived != bytesRequested) { 
+    Serial.print("Error: ");
     Serial.print(bytesReceived);
-    Serial.println(" byte invece di 1.");
+    Serial.println(" byte received instead of 1.");
     return 0x00;
   }
 
@@ -68,49 +76,60 @@ byte readRegister(byte reg) {
   }
 }
 
-// --- FUNZIONE READTEMPERATURE: leggere la temperatura del sensore ---
-// Usa i registri 0x1F (parte intera) e 0x20 (frazione) con readRegister
-// Output: temperatura float in °C (es. 25.25)
+/* READTEMPERATURE FUNCTION
+reads the temperature of the sensor every second
+stores temperature and time data in the temperature buffer and timebuffer
+Uses registers 0x1F (integer part) and 0x20 (fraction) with readRegister,
+As the sensor stores Temperature data decomposed in those two parts. 
+
+Output: floating value of temperature in °C (e.g. 25.25) */
+
 float readTemperature() {
-  // Inizia una conversione di temperatura scrivendo 1 sul bit TEMP_EN (registro 0x21)
+  // Starts a temperature conversion by writing 1 to the TEMP_EN bit (register 0x21 of the max30102 sensor)
   Wire.beginTransmission(0x57);
-  Wire.write(0x21);        // Registro di controllo temperatura
-  Wire.write(0x01);        // Setta TEMP_EN = 1 (avvia conversione)
+  Wire.write(0x21);        // Temperature control register
+  Wire.write(0x01);        // sets TEMP_EN = 1 (starts conversion)
   Wire.endTransmission();
 
 
-  // Legge la parte intera della temperatura (registro 0x1F) usando readRegister
+  // Reads the integer part of the temperature (0x1F register) using readRegister
   int8_t tempInt = (int8_t)readRegister(0x1F);
 
-  // Legge la parte frazionaria della temperatura (registro 0x20)
+  // Reads the fractional part of the temperature (register 0x20)
   uint8_t tempFrac = readRegister(0x20) & 0x0F; // I 4 bit meno significativi rappresentano la frazione
 
-  // Ritorna temperatura come somma di intero + frazione*0.0625°C
+  // Returns temperature as sum of integer + fraction * 0.0625°C 
   return tempInt + (tempFrac * 0.0625f);
 }
 
-// === FUNZIONE SEND T°BUFFER: invio finale temperature ===
+/* SEND TEMPERATURE BUFFER FUNCTION
+Until there are no more data to sent in the Temperature buffer and Time buffer:
+- Constructs packets of 80 bytes for 10 Temperature datapoints.
+- writes the packet on the bleTemp Characteristic.
+*/ 
+
 void sendTemperatureBufferBLE() {
-  const int maxPerPacket = 10; // 10 temperature per pacchetto: 10 x 8 = 80 byte
-  uint8_t tempPacket[80]; // buffer BLE da 80 Byte
+  const int maxPerPacket = 10; // sets 10 as number of temperature datapoints per packet: 10 x 8 = 80 bytes
+  uint8_t tempPacket[80]; // 80 byte BLE packet
 
-  //Serial.println("=== Invio dati temperatura via BLE ===");
-  //Serial.print("Totale misure da inviare: ");
-  //Serial.println(tempIndex);
+  /* SERIAL DEBUG
+  Serial.println("=== Sending temperature data via BLE ===");
+  Serial.print("Total measures to be sent: ");
+  Serial.println(tempIndex); */
 
-  while (tempSendIndex < tempIndex) {    
-    int entries = min(maxPerPacket, tempIndex - tempSendIndex); // ultimo pacchetto può avere meno di 10 entries
-  
+  while (tempSendIndex < tempIndex) {   // while n° of sent T° datapoints < n° of stored T° datapoints 
+    int entries = min(maxPerPacket, tempIndex - tempSendIndex); // number of datapoints per package, last package may have less than 10 entries.
+    // for each entry:
     for (int j = 0; j < entries; j++) {
-      memcpy(&tempPacket[j * 8], &temperatureBuffer[tempSendIndex + j], 4); // Copia 4 byte del float nella posizione j*8 del pacchetto
-      memcpy(&tempPacket[j * 8 + 4], &timeBuffer[tempSendIndex + j], 4); // Copia 4 byte del timestamp nella posizione j*8 + 4
+      memcpy(&tempPacket[j * 8], &temperatureBuffer[tempSendIndex + j], 4); // Copies 4 bytes of the float to position j*8 of the packet
+      memcpy(&tempPacket[j * 8 + 4], &timeBuffer[tempSendIndex + j], 4); // Copies 4 bytes of the timestamp to position j*8 + 4
     }
-    bleTemp.writeValue(tempPacket, entries * 8);
+    bleTemp.writeValue(tempPacket, entries * 8); // writes entries * 8 bytes on the bleTemp characteristic
 
-      /*/ Debug dettagliato
-      Serial.print("Pacchetto inviato con ");
+      /* SERIAL DEBUG
+      Serial.print("Package sent with ");
       Serial.print(entries);
-      Serial.println(" letture:");
+      Serial.println(" datapoints:");
       for (int j = 0; j < entries; j++) {
         float temp;
         uint32_t ts;
@@ -126,25 +145,29 @@ void sendTemperatureBufferBLE() {
 
   tempSendIndex += entries; 
   BLE.poll(); 
-  delay(2000); //  delay per stabilità BLE  
+  delay(2000); //  delay for BLE stability  
   }
-  //Serial.println("Fine invio buffer temperatura.");
+
+  //Serial.println("End of temperature buffer transmission.");
   
-  // Reset buffer e indici
+  // Resets indices and flags
   tempSendIndex = 0;
   tempIndex = 0;
   sendTemp = false;
 }
 
 
-// === FUNZIONE STOREONESAMPLE: in realtà buffer 10 campioni poi invia ===
+/* STOREONESAMPLE FUNCTION 
+reads Red and IR values from the max30102 sensor, stores timestamps in Microseconds
+*/
 void storeOneSample() {
   uint32_t irValue = particleSensor.getIR();
   uint32_t redValue = particleSensor.getRed();
   uint32_t timeMicros = micros();
 
-  int offset = sampleIndex * 10; // capisce dove scrivere il sample nel buffer
+  int offset = sampleIndex * 10; //  where to write the sample in the buffer
 
+  // Creates an unique string of bytes with Red, IR and Time data and writes it in the buffer
   // IR - Big Endian
   dataPacket[offset + 0] = (uint8_t)(irValue >> 16);
   dataPacket[offset + 1] = (uint8_t)(irValue >> 8);
@@ -161,30 +184,35 @@ void storeOneSample() {
   dataPacket[offset + 8] = (uint8_t)((timeMicros >> 16) & 0xFF);
   dataPacket[offset + 9] = (uint8_t)((timeMicros >> 24) & 0xFF);
 
-  sampleIndex++;
+  sampleIndex++; // Signals that one datapoint has been written in the buffer
 
-  // Se ho raccolto 10 campioni, invio il pacchetto BLE, se fallisce lo notifica
+  // If I have collected 10 samples, I send the BLE packet, 
   if (sampleIndex >= 10) {
     bool result = bleData.writeValue(dataPacket, 100);
+
+  // SERIAL DEBUG - if it fails, notifies it
     //if (!result) {
     //   Serial.println("BLE write failed!");
   // }
-    sampleIndex = 0;
 
+    sampleIndex = 0; 
     packetCounter++;
 
-    // === Quando Invio misuro una temperatura
-    if (packetCounter >= 10 && tempIndex < numSec) {
-      // === Quando invio aggiorno LastPacketTimeStamp
+    /* EVERY TIME 10 DATA PACKET ARE SENT (about 1 Hz)
+    A TEMPERATURE VALUE AND ITS TIMESTAMP IS STORED IN THE TEMPERATURE BUFFER
+    */
+
+    if (packetCounter >= 10 && tempIndex < numSec) { 
+      // === When I send I update LastPacketTimeStamp
       lastPacketTimestamp = millis();
       //Serial.println("lastPacketTimestamp =  ");
       //Serial.println(lastPacketTimestamp);
 
       float temp = readTemperature();
       temperatureBuffer[tempIndex] = temp;
-      /*Serial.println("T° letta: ");
+      /*Serial.println("T° read: ");
       Serial.println(temp);
-      Serial.println("all'istante: ");
+      Serial.println("at time: ");
       Serial.println(lastPacketTimestamp); */
       timeBuffer[tempIndex] = lastPacketTimestamp;
       tempIndex++;
@@ -195,26 +223,21 @@ void storeOneSample() {
   }
 }
 
-
-//FUNZIONE ISR (Interrupt Service Routine) - interrupt hardware 
-// void onSensorDataReady()                
-//{
-//  newData = true;                       // Imposta la variabile flag newData a true quando si verifica l'interruzione
-//  Serial.println("Nuovo dato nell'interrupt!"); // Stampa un messaggio di debug sul monitor seriale
-//}
+// ========================== SETUP =================================================================
 
 void setup()
 {
-  Serial.begin(115200); // Inizializzazione del monitor seriale
-  // Arduino inizializza il sensore con ruolo di master I2C
-  Wire.begin();                         // Serve per usare il sensore come master
-  delay(100);                           // Breve pausa
+// ========================== I2C CONNECTION ========================================================
+  Serial.begin(115200); // Serial monitor initialisation
+  // Arduino initialises sensor with I2C master role
+  Wire.begin();                         // Used to use the sensor as a master
+  delay(100);                           
   
-  // Tentativi multipli per inizializzare il sensore 
+  // Multiple attempts to initialise the sensor 
   bool sensorFound = false;
   for (int attempts = 0; attempts < 25; attempts++) {
     if (particleSensor.begin(Wire, I2C_SPEED_FAST)) {
-      Serial.println("Prova2: MAX30105  found.");
+      Serial.println("MAX30105  found.");
       sensorFound = true;
       break;
     }
@@ -223,10 +246,11 @@ void setup()
   }
   if (!sensorFound) {
     Serial.println("MAX30105 was not found after multiple attempts.");
-    while (1);  // blocca tutto se sensore non trovato
+    while (1);  // blocks everything in an infinite loop if sensor not found
   }
 
-  // Configura il sensore con parametri scelti
+// ================== SENSOR CONFIGURATION ============================================================
+  // Configures the sensor with chosen parameters
   byte ledBrightness = 0xFF;  // 
   byte sampleAverage = 8;     // quindi l'output è a 100 Hz
   byte ledMode = 2;           // Rosso + IR
@@ -236,57 +260,56 @@ void setup()
 
   particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
   
-  // Abilita interrupt PPG_RDY scrivendo nel registro 0x02
+  // ================== PPG_RDY INTERRUPT CONFIGURATION ============================================================
+  // Enable interrupt PPG_RDY by writing to register 0x02 (see max 30102 datasheet for PPG_RDY interrupt settings and functioning)
   Wire.beginTransmission(0x57);
-  Wire.write(0x02);              // Interrupt Enable 1
+  Wire.write(0x02);              // 0x02 = Interrupt Enable 1
   Wire.write(0b01000000);        // PPG_RDY_EN = 1
   Wire.endTransmission();
 
-  // Leggi il registro di stato per pulire eventuali interrupt pendenti
+  // Reads the status register to clean up any pending interrupts
   Wire.beginTransmission(0x57);
-  Wire.write(0x00); // Registro Interrupt Status 1
-  Wire.endTransmission(false); // Non mandare stop, preparati a leggere
+  Wire.write(0x00); // 0x00 = Interrupt Status Register 1
+  Wire.endTransmission(false); // Don't send stop, get ready to read
   Wire.requestFrom(0x57, 1);
-  byte dummy = Wire.read(); // Dato letto e ignorato, serve solo per pulire
+  byte dummy = Wire.read(); // Information read and ignored, it only serves to clean
 
-  // DEBUG // Serial.println("Interrupt PPG_RDY configurato correttamente!"); 
+  // DEBUG 
+  // Serial.println("Interrupt PPG_RDY correctly configured!"); 
 
-  // Configura l'interruttore per la gestione del nuovo dato
-  //pinMode(3, INPUT_PULLUP);
-  //attachInterrupt(digitalPinToInterrupt(3), onSensorDataReady, FALLING);
-  
-  // Controlla se il modulo BLE è stato inizializzato correttamente
+// ============ BLE CONNECTION INITIALIZATION =========================================================
+  // Checks whether the BLE module has been correctly initialised
   if (!BLE.begin()) {
     Serial.println("starting Bluetooth® Low Energy failed!");
     while (1);
   }
-  
-  // Imposta il nome locale del dispositivo Bluetooth
+
+  // Sets the local name of the Bluetooth device
   BLE.setLocalName("AA Pulse Oximeter");
   
-  // Imposta il servizio Bluetooth da pubblicare
+  // Sets the Bluetooth service to be published
   BLE.setAdvertisedService(bleService);
  
-  // Aggiungi caratteristiche al servizio BLE
+  // Adds features to the BLE service
   bleService.addCharacteristic(bleCommand); 
   bleService.addCharacteristic(bleData);    
   bleService.addCharacteristic(bleTemp);
 
-  // Aggiungi il servizio Bluetooth
+  // Adds Bluetooth service
   BLE.addService(bleService);
 
-  // Inizializza i valori delle caratteristiche
+  // Initialises feature values
   uint8_t zeroData[100] = {0};
   bleData.writeValue(zeroData, 100);
   bleCommand.writeValue(2);
 
-  // Pubblica servizio BLE
+  // Publishes BLE service
   BLE.advertise();
   Serial.println("Dispositivo Bluetooth attivo, in attesa di connessioni...");
 }
 
 void loop() {
-  // Gestione connessione BLE
+//========================== BLE connection management =================================================
   if (!isConnected) {
     central = BLE.central();
   }
@@ -294,10 +317,12 @@ void loop() {
   if (central.connected()) {
     isConnected = true;
 
-    if (bleCommand.written()) {
+    if (bleCommand.written()) {           
     uint8_t cmd = bleCommand.value();
 
-    switch (cmd) {
+    // bleCommand Char is written by MATLAB as:
+    switch (cmd) { 
+        // 1 - Performs Red and IR mearures, doesn't send Temperature buffer data
         case 1:
             //Serial.println("CASE 1: meas T temp F");
             performingMeasure = true;
@@ -305,6 +330,7 @@ void loop() {
             tempIndex=0;
             break;
         case 0:
+        // 0 - Doesn't perform Red and IR mearures, sends Temperature buffer data
             //Serial.println("CASE 0: meas F temp T");
             performingMeasure = false;
             sendTemp = true;
@@ -318,6 +344,7 @@ void loop() {
             }*/
             break;
         default:
+        // any other value - Doesn't perform Red and IR mearures, doesn't send Temperature buffer data
             //Serial.println("DEFAULT meas F temp F");
             performingMeasure = false;
             sendTemp = false;
@@ -325,11 +352,11 @@ void loop() {
     }
     }
 
-    // Esegui readRegister(0x00) solo se stai effettivamente misurando
+    // When perforing measures we poll the PPG_RDY register
     if (performingMeasure) {
       byte intStatus = readRegister(0x00);
 
-      if (intStatus & 0x40) { // Bit PPG_RDY = 1
+      if (intStatus & 0x40) { // if Bit PPG_RDY = 1 a new read is ready in the FIFO of the sensor
         storeOneSample();
       }
     }
