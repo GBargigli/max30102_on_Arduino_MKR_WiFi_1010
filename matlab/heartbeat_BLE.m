@@ -1,107 +1,118 @@
-% THIS HELPER FUNCTION RECEIVES AND STORES MAX30102-BLUETOOTH-TRANSMITTED-DATA
-% it is called by the script SNR2
+%% This helper function connects to a BLE device (Arduino MKR WiFi 1010) and receives data from the MAX30102 sensor.
+% It is called by the script SNR2 and takes as input the desired acquisition duration in seconds.
+% If no input is provided, the default duration is set to 40 seconds.
 
 function heartbeat_BLE(numSec)
     if nargin < 1
-        numSec = 40; % default 40 secondi
+        numSec = 40; % Default acquisition duration (in seconds) for Red and IR signal
     end
 
-    % Pulisci le variabili globali da eventuali script precedenti
+    % Clear global variables to avoid residual data from previous run
     clear global dataArray dataIndex tempdata tempIndex fricezione;
 
-    % UUID del servizio e delle caratteristiche (usa i tuoi UUID reali qui)
+    % Define UUIDs for BLE service and characteristics
     serviceUUID = '8ee10201-ce06-438a-9e59-549e3a39ba35';
     cmdUUID     = 'bf789fb6-f22d-43b5-bf9e-d5a166a86afa';
-    dataUUID    = '33303cf6-3aa4-44ad-8e3c-21084d9b08db'; % caratteristica singola dati (100 byte)
+    dataUUID    = '33303cf6-3aa4-44ad-8e3c-21084d9b08db'; 
     tempUUID = '44404cf7-4bb5-55be-9f60-32195a8c09ec';
     
-    % Nome del dispositivo BLE
+    % Specify the BLE device name to connect to
     deviceName = 'AA Pulse Oximeter';
     
-    % variabili Global Scope
+    % Global Scope Variables
     global dataArray dataIndex tempdata tempIndex fricezione numSec;
     fricezione=0;
 
-    % PREALLOCAZIONI
+    
+    % Preallocate memory for signal and temperature data
+    % Signal data: [timestamp, IR, RED]
+    % Temperature data: [timestamp, temperature
 
-    % Pre-allocazione array per i dati: colonne = [millis, Temp]
-    % Numero massimo di dati da salvare
+
+    % Maximum number of data to be saved
     maxData = numSec*100;
     dataArray = zeros(maxData,3);
-    % Indice per salvataggio dati
+    % Index for data storage
     dataIndex = 1;
 
-    % Pre-allocazione per dati temperatura: colonne = [timestamp, temperatura]
     tempdata = zeros(numSec, 2);
+    % Index for data storage
     tempIndex = 1;
     
-    %% Connessione BLE e setup caratteristiche
+    %% Establish BLE connection and configure characteristics
     
-    fprintf('Connessione al dispositivo BLE "%s"...\n', deviceName);
+    fprintf('Connection to BLE device "%s"...\n', deviceName);
     
     try
-        % Se esiste una connessione attiva, disconnettila
+        % Disconnect any existing BLE connection to ensure a clean start
         if exist('deviceBLE', 'var') && isvalid(deviceBLE)
             if deviceBLE.Connected
                 disconnect(deviceBLE);
-                pause(1); % attesa per sicurezza
+                pause(1); % waiting for safety
             end
             clear deviceBLE
         end
     
-        % Crea nuova connessione
+        % Create a new BLE connection to the specified device
         deviceBLE = ble(deviceName);
     
     catch ME
-        error('Errore di connessione BLE: %s', ME.message);
+        error('BLE connection error: %s', ME.message);
     end
     
-    % Attendi che il dispositivo sia connesso
+    % Wait until the device is connected
     while ~deviceBLE.Connected
         pause(0.1);
     end
-    fprintf('Dispositivo connesso!\n');
+    fprintf('Device connected!\n');
     
-    % Ottengo le caratteristiche
+    % Retrieve BLE characteristics for command, signal data, and temperature
     charCmd = characteristic(deviceBLE, serviceUUID, cmdUUID);
     charData = characteristic(deviceBLE, serviceUUID, dataUUID); 
     charTemp = characteristic(deviceBLE, serviceUUID, tempUUID);
     
-    % Imposta callback per dati (viene chiamata ogni pacchetto di 100 byte)
+    % Assign callback functions to handle incoming data packets
     charData.DataAvailableFcn = @(src, evt) notifyCallbackHeartbeat(src, evt);
     charTemp.DataAvailableFcn = @(src, evt) tempCallbackHeartbeat(src, evt);
 
-    % Abilita notifiche BLE
+    % Subscribe to BLE notifications 
     subscribe(charData, "notification");
     subscribe(charTemp, "notification");
     
-    fprintf("Notifiche BLE abilitate.\n");
+    fprintf("BLE notifications enabled.\n");
     
-    %% Inizio acquisizione
-    fprintf("Lettura per %d secondi...\n", numSec);
-    write(charCmd, uint8(1)); % invia comando '1' → Arduino inizia misurazione
-    pause(numSec);            % aspetta il tempo di acquisizione
-    write(charCmd, uint8(0));  % invia comando '0' → Arduino ferma misurazione
-    fprintf("Acquisizione terminata.\n"); 
+    %% Start acquisition
+    fprintf("Reading for %d seconds...\n", numSec);
+    write(charCmd, uint8(1)); % send command '1' → Arduino starts measurement
+    pause(numSec);            % wait for acquisition time 
+    % (with pause the execution stops, no background operation that may
+    % slow down BLE transmission are performed.
 
-    fprintf("Attendo ricezione asincrona temperatura (via callback)...\n");
+    % Stop acquisition and trigger temperature transmission by sending command '0'
+    write(charCmd, uint8(0));  
+    fprintf("Acquisition completed.\n"); 
+
+    fprintf("Waiting for asynchronous temperature reception...\n");
     
     pause(30);
 
-    % ========== STATISTICHE DI RICEZIONE DATI ================
-    % n° dati ricevuti e frequenza ricezione dati
-    fprintf("Totale campioni ricevuti: %d\n", dataIndex-1);  
 
-    t = dataArray(1:dataIndex-1, 1);  % timestamp in micros
-    t_sec = (t - t(1)) / 1e6;  % converti in secondi e rendi relativo (t(0) = 0)
-    fricezione = (length(t)) / (t_sec(end));  % totale campioni / durata
-    fprintf("Frequenza media: %.2f Hz\n", fricezione);
+    % ====== DATA RECEPTION STATISTICS ======
+    % Display number of received signal samples and compute acquisition fr
 
-    fprintf("Totale temperature ricevute: %d\n", tempIndex-1);
+    fprintf("Total samples received: %d\n", dataIndex-1);  
 
-    % fprintf('\nDati temperatura e timestamp:\n');
+    t = dataArray(1:dataIndex-1, 1);  % timestamp in microseconds
+    t_sec = (t - t(1)) / 1e6;  % Convert timestamps to seconds and normalize to start from zero
+    fricezione = (length(t)) / (t_sec(end));  % f = total samples / duration
+    fprintf("Average frequency: %.2f Hz\n", fricezione);
+
+    fprintf("Total temperatures received: %d\n", tempIndex-1);
+
+    %% DEBUG
+    % fprintf('\nTemperature and timestamp data:\n');
     % fprintf('---------------------------\n');
-    % fprintf('Indice | Timestamp (ms) | Temperatura (°C)\n');
+    % fprintf('Index | Timestamp (ms) | Temperature (°C)\n');
     % fprintf('---------------------------\n');
     % 
     % for idx = 1:(tempIndex-1)
@@ -112,27 +123,29 @@ function heartbeat_BLE(numSec)
 end
 
 function notifyCallbackHeartbeat(src, ~)
-    % Callback per la caratteristica dati: 
-    % riceve pacchetto da 100 byte (10 campioni da 10 byte ciascuno)
+    % Callback triggered when a signal data packet is received (100 bytes = 10 samples)
+    % receives 100-byte packet (10 samples of 10 bytes each)
     global dataArray dataIndex;
 
     try
-        data = read(src, 'latest'); % leggi ultimo pacchetto notificato
+        data = read(src, 'latest'); % try to read latest notified package
     catch ME
-        warning(ME.identifier, 'Nessun dato disponibile o dispositivo disconnesso: %s', ME.message);
-        return; % esci senza fare nulla
+        warning(ME.identifier, 'No data available or device disconnected: %s', ME.message);
+        return; % returns without doing anything
     end
     
-    % % DEBUG: stampa la lunghezza solo per i primi 10 pacchetti
+    % % DEBUG: 
+    % % prints the length for the first 10 packages 
     % global dataIndex;
     % if dataIndex <= 10
-    %     fprintf("Bytes ricevuti: %d\n", length(data));
+    %     fprintf("Bytes received: %d\n", length(data));
     % end
 
     nSamples = 10;
-    
+
+    %% Decode IR, RED, and timestamp values from each sample
     for i = 0:(nSamples-1)
-        idx = i*10;  % indice base del campione nel vettore dati
+        idx = i*10;  % sample index in data vector
         
         % IR
         irVal = bitshift(uint32(data(idx+1)), 16) + ...
@@ -148,7 +161,7 @@ function notifyCallbackHeartbeat(src, ~)
         % byte 7 + byte 8*2^8 + byte 9*2^16 + byte 10*2^24
         timeVal = double(data(idx+7)) + double(data(idx+8)) * 256 + double(data(idx+9)) * 65536 + double(data(idx+10)) * 16777216;
 
-        % Salva i dati solo se non si è raggiunto il limite massimo di campioni
+        %% Store decoded values in the preallocated array if within boun
         if dataIndex <= size(dataArray,1)
             dataArray(dataIndex,:) = [timeVal, irVal, redVal];
             dataIndex = dataIndex + 1;
@@ -159,42 +172,45 @@ end
 
 
 function tempCallbackHeartbeat(src, ~)
-  
-    fprintf('tempCallbackHeartbeat chiamato\n');
+% Callback triggered when a temperature data packet is received
+
+    fprintf('tempCallbackHeartbeat called\n');
 
     global tempdata tempIndex;
 
     try
-        tempBytes = read(src, 'latest'); % ricevi 80 byte 
+        tempBytes = read(src, 'latest'); % receive 80 bytes 
     catch ME
-        warning(ME.identifier,'Nessun dato temperatura disponibile o dispositivo disconnesso: %s', ME.message);
+        warning(ME.identifier,'No temperature data available or device disconnected: %s', ME.message);
         return;
     end
 
-    %DEBUG: print lunghezza in byte e numero dei pacchetti di T° ricevuti
-    nBytes = length(tempBytes);
-    nEntries = nBytes / 8;
-    fprintf("Pacchetto temperatura ricevuto: %d byte (%d misure)\n", nBytes, nEntries);
-    fprintf('tempIndex prima di scrivere: %d\n', tempIndex); 
+    %% DEBUG: print length in bytes and number of T° packets received
+    %nBytes = length(tempBytes);
+    %nEntries = nBytes / 8;
+    %fprintf("Temperature packet received: %d byte (%d measures)\n", nBytes, nEntries);
+    %fprintf('tempIndex before writing: %d\n', tempIndex); 
     % if mod(nBytes,8) ~= 0
-    % warning("Pacchetto temperatura di lunghezza non multipla di 8 bytes!");
+    % warning("Temperature packet not a multiple of 8 bytes!");
     % end
 
-    for i = 0:(nEntries - 1) % Ciclo su ogni misura contenuta nel pacchetto
-        % Calcolo l'offset nel vettore tempBytes dove inizia la i-esima misura
+
+    %% Read and decode each temperature entry (8 bytes: 4 for temperature, 4 for timestamp)
+    for i = 0:(nEntries - 1) % Cycle on every measure in the package
+        % I calculate the offset in the tempBytes vector where the i-th measurement starts
         offset = i * 8;
 
-        % Estrai temperatura (4 byte float)
+        % Extract temperature (4 byte float)
         tempFloatBytes = tempBytes(offset + (1:4));
         tempVal = typecast(uint8(tempFloatBytes), 'single');
 
-        % Estrai timestamp (4 byte little-endian uint32)
+        % Extract timestamp (4 byte little-endian uint32)
         timeBytes = tempBytes(offset + (5:8));
         timestamp = typecast(uint8(timeBytes), 'uint32');        
-        timestamp = double(timestamp); % Converti in double
+        timestamp = double(timestamp); % Convert timestamp to double for consistency
 
         if tempIndex <= size(tempdata, 1) 
-            %fprintf("Scrivo tempIndex=%d: timestamp=%d, temp=%.2f\n", tempIndex, timestamp, tempVal);
+            %fprintf("Writing tempIndex=%d: timestamp=%d, temp=%.2f\n", tempIndex, timestamp, tempVal);
             tempdata(tempIndex, :) = [timestamp, tempVal];
             tempIndex = tempIndex + 1;
         end
