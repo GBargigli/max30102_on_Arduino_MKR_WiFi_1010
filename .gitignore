@@ -1,0 +1,4 @@
+*.asv
+*.m~        # file temporanei creati da alcuni editor
+*.bak       # backup generici
+*.tmp       # file temporanei
