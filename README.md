@@ -1,13 +1,12 @@
 ### PPG and Temperature Signal Acquisition & Analysis via BLE
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-This repository provides a complete workflow for acquiring, transmitting, and analyzing photoplethysmographic (PPG) signals and temperature data using an Arduino-based system. 
-The setup is designed for biomedical signal analysis, particularly focusing on signal quality assessment through Signal-to-Noise Ratio (SNR) computation.
+This repository provides a complete workflow for acquiring, transmitting, and analyzing photoplethysmographic (PPG) signals and temperature data using an Arduino-based system, particularly focusing on signal quality assessment through Signal-to-Noise Ratio (SNR) computation.
 
 ### Required Materials
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 **Hardware:**
 - Arduino MKR WiFi 1010
-- MAX30105 sensor (for Red/IR PPG and temperature)
+- MAX30102 sensor (for Red/IR PPG and temperature)
 - USB cable, Dupont cables 
 
 **Software:**
@@ -28,7 +27,7 @@ Temperature data is also collected to monitor sensor stability and environmental
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 1. **Upload the Arduino firmware (`heartbeat7`)**
-   - Initializes the MAX30105 sensor
+   - Initializes the MAX30102 sensor
    - Sets up BLE services and characteristics
    - Transmits Red/IR signals continuously and temperature data in batches
 
@@ -65,10 +64,10 @@ All components are designed to work together seamlessly:
 
 ### Components
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-For detailed descriptions of each component, refer to the documentation in the `docs/` folder.
+For detailed descriptions of each component, refer to the documentation in the `Docs/` folder.
 
 ## heartbeat7
-Arduino firmware that initializes the MAX30105 sensor and handles BLE transmission of Red/IR signals and temperature data. 
+Arduino firmware that initializes the MAX30102 sensor and handles BLE transmission of Red/IR signals and temperature data. 
 It operates in two modes: continuous acquisition and batch temperature transmission. Data is sent in structured packets with timestamps.
 📄 See: heartbeat7_description.md
 
