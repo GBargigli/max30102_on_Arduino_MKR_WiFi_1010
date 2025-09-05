@@ -1,5 +1,5 @@
 ### heartbeat7:
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---
 This code implements a Bluetooth Low Energy (BLE) data acquisition system using the MAX30105 sensor. 
 It is designed to collect photoplethysmographic (PPG) signals—specifically Red and Infrared (IR)—and temperature data, 
 and transmit them via BLE to a central device. 
@@ -8,11 +8,10 @@ Data is buffered and sent in structured packets, with timestamps included for sy
 The code handles sensor initialization, BLE service setup, data formatting, and communication logic;  
 Its structure makes it easy to interface with a MATLAB script that
 receives, decodes, and analyzes the incoming data for further processing or visualization.
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---
 
-
- GLOBAL VARIABLES ----------------------------------------------------------------------------------------------------------------
-
+### GLOBAL VARIABLES 
+---
 - performingMeasure: Flag that initiates BLE acquisition and transmission (notify) of Red and IR signals.
 - sendTemp: Flag that initiates acquisition and BLE transmission (notify) of temperature data.
 - isConnected: Flag indicating an active Bluetooth connection.
@@ -41,11 +40,13 @@ When packetCounter = 10 a temperature data point is stored in temperatureBuffer,
 
 
 
- HELPER FUNCTIONS ----------------------------------------------------------------------------------------------------------------
+ ### HELPER FUNCTIONS 
+ ---
 
-1.  byte readRegister(byte reg)
+## 1.  byte readRegister(byte reg)
+
 READS A BYTE FROM A MAX30102 REGISTER 
---------------------------------------------------------------------------------------
+
 - Writes the register address via I2C.
 - Requests to read a byte.
 - Checks that exactly one byte is received.
@@ -53,9 +54,10 @@ READS A BYTE FROM A MAX30102 REGISTER
 
 ---------------------------------------------------------------------------------------
 
-2. float readTemperature()
+## 2. float readTemperature()
+
 RETURNS A TEMPERATURE DATAPOINT
----------------------------------------------------------------------------------------
+
 - Writes 1 to the temperature configuration register of the sensor (TEMP_EN = 1 --> conversion starts).
 - Reads the integer part of the Temperature register.
 - Reads the integer and fractional parts of the temperature register.
@@ -63,9 +65,10 @@ RETURNS A TEMPERATURE DATAPOINT
 
 ---------------------------------------------------------------------------------------
 
-3. void sendTemperatureBufferBLE()
+## 3. void sendTemperatureBufferBLE()
+
 SENDS TEMPERATURE DATA  VIA A SERIES OF BLE PACKETS  
----------------------------------------------------------------------------------------
+
 maxPerPacket: Number of (Temperature, Time) entries per BLE packet.
 tempPacket[80]: Preallocated array for the packet.
 
@@ -82,10 +85,11 @@ tempPacket[80]: Preallocated array for the packet.
 
 ---------------------------------------------------------------------------------------
 
-4. void storeOneSample()
+## 4. void storeOneSample()
+
 STORES AND SENDS DATA BUFFERS OF 10 SAMPLES
 IN ADDITION, EVERY 10 SENDS STORES A TEMPERATURE AND ITS TIMESTAMP IN THE RESPECTIVE BUFFERS (T°; t)
----------------------------------------------------------------------------------------
+
 - Reads and assigns to variables red, ir and time values (irValue, redValue, timeMicros).
 - Writes the values (3 Big Endian + 3 Big Endian + 4 Little Indian bits) into the buffer with an incremental offset.
 - Increases sampleIndex each time a value is written.
@@ -101,8 +105,8 @@ IN ADDITION, EVERY 10 SENDS STORES A TEMPERATURE AND ITS TIMESTAMP IN THE RESPEC
 
 
 
- SETUP ----------------------------------------------------------------------------------------------------------------
-
+ ### SETUP 
+ ---
 1. Initialises I2C connection with sensor (multiple attempts).
 2. Configures sensor acquisition parameters.
 3. Enables the interrupt for PPG_RDY and reads the register to clean it of residual interrupts.
@@ -110,7 +114,8 @@ IN ADDITION, EVERY 10 SENDS STORES A TEMPERATURE AND ITS TIMESTAMP IN THE RESPEC
 
 
 
- LOOP ---------------------------------------------------------------------------------------------------------------- 
+ ### LOOP  
+ ---
 
 1. Continuously searches for a central BLE device until isConnected is true.
 2. If a connection exists:
