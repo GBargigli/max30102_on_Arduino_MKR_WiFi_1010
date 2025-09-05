@@ -8,7 +8,7 @@ function heartbeat_BLE(numSec)
     end
 
     % Clear global variables to avoid residual data from previous run
-    clear global dataArray dataIndex tempdata tempIndex fricezione;
+    clear global dataArray dataIndex tempdata tempIndex recFreq;
 
     % Define UUIDs for BLE service and characteristics
     serviceUUID = '8ee10201-ce06-438a-9e59-549e3a39ba35';
@@ -20,8 +20,8 @@ function heartbeat_BLE(numSec)
     deviceName = 'AA Pulse Oximeter';
     
     % Global Scope Variables
-    global dataArray dataIndex tempdata tempIndex fricezione numSec;
-    fricezione=0;
+    global dataArray dataIndex tempdata tempIndex recFreq numSec;
+    recFreq=0;
 
     
     % Preallocate memory for signal and temperature data
@@ -104,8 +104,8 @@ function heartbeat_BLE(numSec)
 
     t = dataArray(1:dataIndex-1, 1);  % timestamp in microseconds
     t_sec = (t - t(1)) / 1e6;  % Convert timestamps to seconds and normalize to start from zero
-    fricezione = (length(t)) / (t_sec(end));  % f = total samples / duration
-    fprintf("Average frequency: %.2f Hz\n", fricezione);
+    recFreq = (length(t)) / (t_sec(end));  % f = total samples / duration
+    fprintf("Average frequency: %.2f Hz\n", recFreq);
 
     fprintf("Total temperatures received: %d\n", tempIndex-1);
 

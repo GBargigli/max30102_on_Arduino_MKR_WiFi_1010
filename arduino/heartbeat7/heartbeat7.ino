@@ -280,7 +280,7 @@ void setup()
 // ============ BLE CONNECTION INITIALIZATION =========================================================
   // Checks whether the BLE module has been correctly initialised
   if (!BLE.begin()) {
-    Serial.println("starting Bluetooth® Low Energy failed!");
+    Serial.println("starting Bluetooth Low Energy failed!");
     while (1);
   }
 
@@ -305,7 +305,7 @@ void setup()
 
   // Publishes BLE service
   BLE.advertise();
-  Serial.println("Dispositivo Bluetooth attivo, in attesa di connessioni...");
+  Serial.println("Bluetooth device active, waiting for connection...");
 }
 
 void loop() {

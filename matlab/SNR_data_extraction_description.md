@@ -1,11 +1,9 @@
-##### MATLAB Script Description: SNR\_data\_extraction.m
-
+### SNR_data_extraction:
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 This MATLAB script processes and analyzes data acquired from an Arduino-based system using the MAX30105 sensor.
 It collects photoplethysmographic (PPG) signals—specifically Red and Infrared (IR)—and temperature data
 at five different LED intensities (10–50 mA), with five repeated measurements per intensity.
----
-
-
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 FOLDER SETUP ----------------------------------------------------------------------------------------------------------------
 
@@ -65,5 +63,5 @@ INTEGRATION --------------------------------------------------------------------
 This script is designed to work in conjunction with:
 
 * Arduino acquisition system using BLE
-* MATLAB scripts for BLE data reception (e.g., heartbeat\_BLE, SNR2)
+* MATLAB scripts for BLE data reception (e.g., heartbeat\_BLE, SNR)
 * .mat files generated during acquisition

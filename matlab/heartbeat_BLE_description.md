@@ -1,4 +1,4 @@
-MATLAB Function Description: heartbeat_BLE(numSec)
+### MATLAB Function Description: heartbeat_BLE(numSec)
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 This MATLAB function manages the reception and storage of Red and Infrared data transmitted via Bluetooth Low Energy (BLE) from the MAX30105 sensor. 
 It is designed to work in coordination with an Arduino-based (Arduino MKR WiFi 1010) acquisition system and is typically called by a main script (e.g., SNR2) with the desired acquisition duration in seconds as input. If no input is provided, the default duration is 40 seconds.
@@ -10,7 +10,7 @@ GLOBAL VARIABLES ---------------------------------------------------------------
 - dataIndex: Index for tracing the number of incoming Red and IR signal samples written into the dataArray.
 - tempdata: Preallocated array of size [numSec, 2] to store temperature and timestamp data.
 - tempIndex: Index for tracing the number of incoming temperature signal samples written into the tempdata array.
-- fricezione: Variable used to calculate the average acquisition frequency.
+- recFreq: Variable used to calculate the average acquisition frequency.
 - numSec: Duration of acquisition in seconds (default = 40).
 
 BLE SETUP AND CONNECTION -------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -62,5 +62,5 @@ tempCallbackHeartbeat(src, ~)
 
 POST-ACQUISITION STATISTICS ----------------------------------------------------------------------------------------------------------------------------------------------------------------
 - Prints total number of signal samples received.
-- Computes and prints average acquisition frequency (fricezione).
+- Computes and prints average acquisition frequency (recFreq).
 - Prints total number of temperature samples received.
