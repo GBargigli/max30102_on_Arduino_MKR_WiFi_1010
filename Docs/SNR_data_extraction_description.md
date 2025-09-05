@@ -1,11 +1,10 @@
 ### SNR_data_extraction:
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---
 This MATLAB script processes and analyzes data acquired from an Arduino-based system using the MAX30105 sensor.
 It collects photoplethysmographic (PPG) signals—specifically Red and Infrared (IR)—and temperature data
 at five different LED intensities (10–50 mA), with five repeated measurements per intensity.
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-FOLDER SETUP ----------------------------------------------------------------------------------------------------------------
+## FOLDER SETUP 
 
 * Creates subfolders for saving exported figures and tables:
 
@@ -14,7 +13,7 @@ FOLDER SETUP -------------------------------------------------------------------
   * images/PSD: Power Spectral Density plots
   * tables: CSV tables with raw and statistical SNR data
 
-DATA EXTRACTION ------------------------------------------------------------------------------------------------------------
+## DATA EXTRACTION 
 
 * Iterates over each LED intensity (10mA, 20mA, ..., 50mA)
 * For each intensity:
@@ -29,7 +28,7 @@ DATA EXTRACTION ----------------------------------------------------------------
   * Exports figures as .png images
   * Closes figures to free memory
 
-STATISTICAL ANALYSIS --------------------------------------------------------------------------------------------------------
+## STATISTICAL ANALYSIS 
 
 * Computes:
 
@@ -39,7 +38,7 @@ STATISTICAL ANALYSIS -----------------------------------------------------------
 
 * Separately for IR and Red channels
 
-TABLE GENERATION ------------------------------------------------------------------------------------------------------------
+## TABLE GENERATION 
 
 * Creates two types of tables:
 
@@ -53,13 +52,13 @@ TABLE GENERATION ---------------------------------------------------------------
   * SNR\_IR\_stats.csv
   * SNR\_Red\_stats.csv
 
-OUTPUT ----------------------------------------------------------------------------------------------------------------------
+## OUTPUT 
 
 * PNG images of signal, temperature, and PSD plots
 * CSV tables with raw and statistical SNR values
 * Console message confirming successful extraction
 
-INTEGRATION ------------------------------------------------------------------------------------------------------------------
+## INTEGRATION 
 This script is designed to work in conjunction with:
 
 * Arduino acquisition system using BLE
