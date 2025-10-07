@@ -1,6 +1,8 @@
 ### PPG and Temperature Signal Acquisition & Analysis via BLE
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-This repository provides a complete workflow for acquiring, transmitting, and analyzing photoplethysmographic (PPG) signals and temperature data using an Arduino-based system, particularly focusing on signal quality assessment through Signal-to-Noise Ratio (SNR) computation.
+This repository provides firmware code for acquiring and transmitting photoplethysmographic (PPG) signals and temperature data using Arduino MKR WiFi 1010 and the MAX30102 sensor. Furthermore, an illustrative MATLAB pipeline for the collection and plotting of data, then focusing on signal quality assessment through Signal-to-Noise Ratio (SNR) computation, is provided.
+While BLE communication is established between Arduino and MATLAB, Arduino and the MAX30102 sensor communicate via I2C transmission, hence a USB cable is required.
+The pipeline has been tested for a maximum "stress" duration of ten minutes.
 
 ### Required Materials
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
